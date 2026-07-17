@@ -1,6 +1,6 @@
 module github.com/rajesamp/ahp-agent-sync-demo
 
-go 1.23
+go 1.25
 
 require (
 	github.com/coder/websocket v1.8.13
