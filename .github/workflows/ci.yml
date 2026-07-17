@@ -9,6 +9,25 @@
 #
 # Every control below is annotated with WHY it exists so the pipeline is
 # self-documenting for reviewers.
+#
+# SUPPLY-CHAIN HARDENING NOTE (2026-07): third-party GitHub Actions are a
+# real attack surface, not a theoretical one. aquasecurity/trivy-action was
+# compromised on 2026-03-19 when an attacker force-pushed 76 of its 77
+# mutable version tags to commits serving an infostealer payload; only
+# v0.35.0 survived because GitHub's immutable-release protection had been
+# enabled just before that tag was cut. See:
+# https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23
+#
+# Mitigation applied here: aquasecurity/trivy-action is pinned to its full
+# commit SHA (not a tag). First-party actions/* and docker/* actions carry
+# stronger org-level tag-integrity guarantees, but for maximum rigor in a
+# production pipeline, pin ALL actions (including actions/checkout,
+# actions/setup-go, docker/*, anchore/*, sigstore/*) to a verified full
+# 40-char commit SHA rather than a mutable major-version tag, and enforce
+# this with a linter such as zizmor or pinact in a pre-merge check. This
+# repo does not pin every action to SHA to avoid committing unverified
+# hashes — verify each one yourself against the action's release page
+# before pinning, per https://docs.github.com/en/actions/reference/security/secure-use#using-third-party-actions.
 
 name: ci
 
@@ -30,6 +49,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Statically audits this workflow file for exactly the class of risk
+      # described above: unpinned/mutable-tag action refs, template
+      # injection, excessive permissions, credential leakage. Grafana Labs
+      # adopted this same tool org-wide after the trivy-action incident for
+      # this exact reason. advanced-security:false because this runs
+      # without a paid GitHub Advanced Security tier; it still fails the
+      # job on findings. https://github.com/zizmorcore/zizmor
+      - name: Audit workflow security (zizmor)
+        uses: zizmorcore/zizmor-action@v1
+        with:
+          advanced-security: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -70,8 +101,17 @@ jobs:
 
       # Fail the build on fixable HIGH/CRITICAL CVEs in the image so
       # vulnerable dependencies are caught before release.
+      #
+      # SUPPLY-CHAIN NOTE: trivy-action suffered a real tag-hijack attack
+      # (2026-03-19): 76 of 77 mutable version tags were force-pushed to
+      # commits serving an infostealer payload. Only v0.35.0 (protected by
+      # GitHub's immutable-release feature) and this exact commit SHA were
+      # unaffected. Per GitHub's and Aqua's own remediation guidance, this
+      # workflow pins by full commit SHA rather than a mutable tag.
+      # Verified-safe SHA for v0.35.0: 57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+      # https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23
       - name: Vulnerability scan (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: ${{ env.IMAGE }}:ci-${{ github.sha }}
           format: table

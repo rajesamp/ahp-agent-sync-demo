@@ -116,9 +116,27 @@ itself:
 - **Provenance.** `actions/attest-build-provenance` attaches a signed SLSA
   provenance attestation binding the image digest to the exact
   workflow/commit that produced it.
+- **CI workflow self-audit.** [`zizmor`](https://github.com/zizmorcore/zizmor)
+  runs on every push/PR and fails the build on unpinned/mutable-tag action
+  references, template injection, excessive permissions, and credential
+  leakage patterns in `ci.yml` itself — the pipeline is a supply-chain
+  asset too, not just the artifact it produces.
 
-Consumers can then verify both the signature and the provenance against the
+**Real-world grounding for this control:** on 2026-03-19, an attacker with
+compromised credentials force-pushed 76 of 77 mutable version tags in
+`aquasecurity/trivy-action` (the CVE scanner this pipeline uses) to commits
+serving an infostealer payload; only `v0.35.0` survived because GitHub's
+immutable-release protection had been enabled just before that tag was cut
+([GHSA-69fq-xp46-6x23](https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23)).
+This repo pins `trivy-action` to its verified commit SHA rather than a tag
+as a direct response, and runs `zizmor` to catch the same class of risk
+across every other action reference. Consumers of the released image can
+then verify both the cosign signature and the SLSA provenance against the
 image digest before running it.
+
+Always verify any GitHub Action commit SHA against the vendor's own
+release page before pinning — do not trust a SHA from an unverified
+third-party source, including AI-generated ones.
 
 ## 7. Reporting
 
