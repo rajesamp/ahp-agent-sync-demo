@@ -48,7 +48,12 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
+      # persist-credentials:false — the checkout token is never needed
+      # past this step, so don't leave it in .git/config where a later
+      # step (or a malicious dependency) could read and exfiltrate it.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       # Statically audits this workflow file for exactly the class of risk
       # described above: unpinned/mutable-tag action refs, template
@@ -131,6 +136,8 @@ jobs:
       attestations: write    # attach the provenance attestation
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Log in to GHCR
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
@@ -170,10 +177,15 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
+      # Interpolate expression outputs via env vars rather than directly in
+      # the run: script, so the shell never re-parses attacker-influenced
+      # text as code (defends against template-injection into run: blocks).
       - name: Sign image (keyless, OIDC)
         env:
           COSIGN_EXPERIMENTAL: "1"
-        run: cosign sign --yes ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+          IMAGE_REF: ${{ env.IMAGE }}
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_REF}@${IMAGE_DIGEST}"
 
       # SLSA build provenance: a signed attestation binding the image
       # digest to the exact workflow/commit that built it, so consumers
