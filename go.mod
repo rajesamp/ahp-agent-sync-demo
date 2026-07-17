@@ -1,4 +1,4 @@
-module github.com/rajksampath/ahp-agent-sync-demo
+module github.com/rajesamp/ahp-agent-sync-demo
 
 go 1.23
 

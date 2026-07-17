@@ -1,6 +1,6 @@
 # ahp-agent-sync-demo
 
-[![ci](https://github.com/rajksampath/ahp-agent-sync-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/rajksampath/ahp-agent-sync-demo/actions/workflows/ci.yml)
+[![ci](https://github.com/rajesamp/ahp-agent-sync-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/rajesamp/ahp-agent-sync-demo/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/go-1.23-00ADD8)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
