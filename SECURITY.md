@@ -138,6 +138,16 @@ Always verify any GitHub Action commit SHA against the vendor's own
 release page before pinning — do not trust a SHA from an unverified
 third-party source, including AI-generated ones.
 
+**Operational reality check:** the first real Trivy run against this image
+found a CRITICAL `crypto/tls` cert-validation CVE and a HIGH `net/url`
+DoS in the Go 1.23 standard library baked into the binary; fixing it
+surfaced a second wave of newly-disclosed stdlib CVEs against the next
+patch too. Pin the Go toolchain to the *latest patched* line
+(currently `1.25.12` / `1.26.5`), not just a major version, and expect
+to bump it again — the scan gate exists precisely so this doesn't slip
+through silently. Treat a clean Trivy run as a point-in-time result, not
+a permanent guarantee; re-scan on every dependency or base-image bump.
+
 ## 7. Reporting
 
 This is a demonstration repository, not a supported product. For issues in

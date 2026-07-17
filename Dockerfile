@@ -3,7 +3,7 @@
 # ─── Stage 1: build a fully static host binary ───────────────────────────
 # Pin the toolchain image by tag; CI additionally records the resolved
 # digest in the SBOM so the exact builder is auditable.
-FROM golang:1.25.7-bookworm AS build
+FROM golang:1.25.12-bookworm AS build
 
 WORKDIR /src
 
