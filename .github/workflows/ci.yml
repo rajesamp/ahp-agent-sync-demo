@@ -18,16 +18,16 @@
 # enabled just before that tag was cut. See:
 # https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23
 #
-# Mitigation applied here: aquasecurity/trivy-action is pinned to its full
-# commit SHA (not a tag). First-party actions/* and docker/* actions carry
-# stronger org-level tag-integrity guarantees, but for maximum rigor in a
-# production pipeline, pin ALL actions (including actions/checkout,
-# actions/setup-go, docker/*, anchore/*, sigstore/*) to a verified full
-# 40-char commit SHA rather than a mutable major-version tag, and enforce
-# this with a linter such as zizmor or pinact in a pre-merge check. This
-# repo does not pin every action to SHA to avoid committing unverified
-# hashes — verify each one yourself against the action's release page
-# before pinning, per https://docs.github.com/en/actions/reference/security/secure-use#using-third-party-actions.
+# Mitigation applied here: every action in this workflow (first-party
+# actions/*, docker/*, and third-party anchore/sigstore/aquasecurity/
+# zizmorcore) is pinned to a verified full 40-char commit SHA, not a
+# mutable tag, with the human-readable version kept as a trailing comment.
+# A zizmor step below enforces this as a CI gate — the build fails if any
+# future edit reintroduces a tag reference. SHAs were resolved from each
+# vendor's own GitHub Releases/tags API immediately before pinning; always
+# re-verify against the vendor's release page rather than trusting a SHA
+# from an unverified third party, per
+# https://docs.github.com/en/actions/reference/security/secure-use#using-third-party-actions.
 
 name: ci
 
@@ -48,7 +48,7 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # Statically audits this workflow file for exactly the class of risk
       # described above: unpinned/mutable-tag action refs, template
@@ -63,7 +63,7 @@ jobs:
           advanced-security: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: "1.23"
           check-latest: true
@@ -92,7 +92,7 @@ jobs:
       # Build the image locally (no push) so PRs exercise the Dockerfile
       # and the scan below runs against the real artifact.
       - name: Build image (local, no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: false
@@ -130,10 +130,10 @@ jobs:
       id-token: write        # OIDC token for keyless cosign + provenance
       attestations: write    # attach the provenance attestation
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -141,7 +141,7 @@ jobs:
 
       - name: Build and push image (by digest)
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: true
@@ -152,14 +152,14 @@ jobs:
       # Software Bill of Materials: syft produces a CycloneDX SBOM that
       # travels with the release for downstream vuln management / audit.
       - name: Generate SBOM (Syft)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           image: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.cdx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom
           path: sbom.cdx.json
@@ -168,7 +168,7 @@ jobs:
       # no private key to store or rotate. The signature is stored in the
       # registry alongside the image.
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Sign image (keyless, OIDC)
         env:
@@ -179,7 +179,7 @@ jobs:
       # digest to the exact workflow/commit that built it, so consumers
       # can verify where the artifact came from.
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.push.outputs.digest }}
