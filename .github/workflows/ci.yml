@@ -1,0 +1,146 @@
+# CI + supply-chain pipeline for the AHP multi-client sync demo.
+#
+# Two jobs:
+#   build-test  — always: format/vet/test/build the Go code and (on any
+#                 push/PR) build the container image and scan it.
+#   release     — main only: push the image to GHCR, generate an SBOM,
+#                 sign the image keylessly with cosign (OIDC, no
+#                 long-lived keys), and attach SLSA build provenance.
+#
+# Every control below is annotated with WHY it exists so the pipeline is
+# self-documenting for reviewers.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least-privilege default: jobs opt into the exact scopes they need.
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+
+      # gofmt as a gate: unformatted code fails the build instead of
+      # silently drifting.
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race detector on)
+        run: go test -race ./...
+
+      - name: Build
+        run: |
+          go build -o bin/host   ./host
+          go build -o bin/viewer ./clients/viewer
+          go build -o bin/agent  ./clients/agent
+
+      # Build the image locally (no push) so PRs exercise the Dockerfile
+      # and the scan below runs against the real artifact.
+      - name: Build image (local, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}:ci-${{ github.sha }}
+
+      # Fail the build on fixable HIGH/CRITICAL CVEs in the image so
+      # vulnerable dependencies are caught before release.
+      - name: Vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}:ci-${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+  release:
+    # Only publish from main, never from PRs (which could come from forks).
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write       # push image to GHCR
+      id-token: write        # OIDC token for keyless cosign + provenance
+      attestations: write    # attach the provenance attestation
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image (by digest)
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+
+      # Software Bill of Materials: syft produces a CycloneDX SBOM that
+      # travels with the release for downstream vuln management / audit.
+      - name: Generate SBOM (Syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+
+      # Keyless signing: cosign uses the job's OIDC identity, so there is
+      # no private key to store or rotate. The signature is stored in the
+      # registry alongside the image.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image (keyless, OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: cosign sign --yes ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+
+      # SLSA build provenance: a signed attestation binding the image
+      # digest to the exact workflow/commit that built it, so consumers
+      # can verify where the artifact came from.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

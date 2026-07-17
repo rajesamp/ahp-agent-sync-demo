@@ -1,0 +1,10 @@
+.git
+.github
+*.md
+audit.log
+*.log
+bin/
+scripts/
+Dockerfile
+.dockerignore
+.gitignore

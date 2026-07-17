@@ -1,0 +1,4 @@
+github.com/coder/websocket v1.8.13 h1:f3QZdXy7uGVz+4uCJy2nTZyM0yTBj8yANEHhqlXZ9FE=
+github.com/coder/websocket v1.8.13/go.mod h1:LNVeNrXQZfe5qhS9ALED3uA+l5pPqvwXg3CKoDBB2gs=
+github.com/microsoft/agent-host-protocol/clients/go v0.5.2 h1:OTFA+J6Z1e5IaVJhaOIoAeh6M14mrE9k0/rHis7tpnQ=
+github.com/microsoft/agent-host-protocol/clients/go v0.5.2/go.mod h1:5eYn2TLN5zKxj6zSyIpA1pHUKzQrX/rQB4M9vl0lSLE=
